@@ -266,3 +266,239 @@ may not fit the constraints.
 | `i64.extend16_s`      | `LExtendS`   | Extend sign of short as long on stack        |
 | `i64.extend32_s`      | `LExtendI`   | Extend sign of integer as long on stack      |
 
+### Reference instructions
+
+| WAT           | Wasmin       | Semantics                                           |
+|---------------|--------------|-----------------------------------------------------|
+| `ref.null`    | `NullConst`  | Push null on stack                                  |
+| `ref.is_null` | `IsNull`     | Pop stack and return 1 if null                      |
+| `ref.func $i` | `FuncGet $i` | Push reference from function address table on stack |
+
+### Branch instructions
+
+| WAT                    | Wasmin               | Semantics                                                  |
+|------------------------|----------------------|------------------------------------------------------------|
+| `unreachable`          | `Unreachable`        | Unconditionally trap the VM immediately.                   |
+| `nop`                  | `Nop`                | No-operation.                                              |
+| `block`                | `Block`              | Denotes a block to branch out of.                          |
+| `loop`                 | `Loop`               | Denotes a loop to branch to the beginning of.              |
+| `if`                   | `If`                 | Conditional. Must be followed by `Else` and `End`.         |
+| `else`                 | `Else`               | Alternative branch of `If`. Must be followed by `End`.     |
+| `try`                  | `Try`                | Block that may throw and handle an exception.              |
+| `catch`                | `Catch`              | Block that handles an exception.                           |
+| `catch_all`            | `CatchAll`           | Block that handles all uncaught exceptions.                |
+| `delegate`             | `Delegate`           | Forward to a specific catch block.                         |
+| `throw`                | `Throw`              | Throws an exception.                                       |
+| `rethrow`              | `Rethrow`            | Rethrows what was caught by the catch block.               |
+| `end`                  | `End`                | End of `Block`, `Loop`, `If`, `Else`, `Try` and function.  |
+| `br`                   | `Branch`             | Branches to the end of a block or the beginning of a loop. |
+| `br_if`                | `BranchIf`           | Conditional version of above.                              |
+| `br_table`             | `BranchTable`        | Table switch.                                              |
+| `return`               | `Return`             | Return values in stack.                                    |
+| `call`                 | `Call`               | Call to function.                                          |
+| `call_indirect`        | `CallIndirect`       | Call to function indirectly.                               |
+| `return_call`          | `ReturnCall`         | Return values in stack to caller.                          |
+| `return_call_indirect` | `ReturnCallIndirect` | Return values in stack to indirect caller.                 |
+| `drop`                 | `Drop`               | Pop the value from stack                                   |
+| `select`               | `Select`             | For `a, b, i`, if `i` is `0`, return `b`, else `a`.        |
+| `select $t`            | `Select $t`          | Above but `a` and `b` must be of type `t`.                 |
+
+## Functions
+
+Functions can be declared like the following:
+
+```wsmn
+.func RESULT name(PARAM a) LOCAL b
+	; Instructions here.
+.end
+```
+
+The equivalent in WAT is the following:
+
+```wat
+(func (param $a PARAM) (local $b LOCAL) (result RESULT)
+	;; Instructions here.
+)
+```
+
+A more complete example:
+
+<details><summary>Wasmin</summary>
+
+```asm
+.import "console" "str" .func str
+.import "console" "num" .func num
+
+.start main
+
+.func void main() int a
+		iconst 0
+		localset a
+	loop:
+		localget a
+		iconst 4096
+		igreaterthan
+		branchif exit
+		localget 0
+		iconst 1
+		iadd
+		localtee 0
+		iconst 3
+		irem
+		iconst 0
+		inotequal
+		branchif skipFizz
+		iconst 1
+		call str
+		iconst 0
+		localget 0
+		isub
+		localset 0
+	skipFizz:
+		localget 0
+		iconst 5
+		irem
+		iconst 0
+		inotequal
+		branchif skipBuzz
+		iconst 2
+		call str
+		localget 0
+		iconst 0
+		ilessthan
+		branchif skipBuzz
+		iconst 0
+		localget 0
+		isub
+		localset 0
+	skipBuzz:
+		localget 0
+		iconst 0
+		igreaterthan
+		branchif skipToPrint
+		iconst 0
+		localget 0
+		isub
+		ilocalset 0
+		iconst 0
+		call str
+		branch loop
+	skipToPrint:
+		localget 0
+		call num
+		branch loop
+	exit:
+.end
+```
+
+</details>
+
+<details><summary>WAT</summary>
+
+```wat
+(module
+	(import "console" "str" (func $str (param i32)))
+	(import "console" "num" (func $num (param i32)))
+	(start $start)
+	(func $start (local i32)
+		i32.const 0
+		local.set 0
+		(block $exit
+		(loop $loop
+			local.get 0
+			i32.const 4096
+			i32.gt_u
+			br_if $exit
+			local.get 0
+			i32.const 1
+			i32.add
+			local.set 0
+			(block $skipFizz
+				local.get 0
+				i32.const 3
+				i32.rem_s
+				i32.const 0
+				i32.ne
+				br_if $skipFizz
+				i32.const 1
+				call $str
+				i32.const 0
+				local.get 0
+				i32.sub
+				local.set 0
+			)
+			(block $skipBuzz
+				local.get 0
+				i32.const 5
+				i32.rem_s
+				i32.const 0
+				i32.ne
+				br_if $skipBuzz
+				i32.const 2
+				call $str
+				local.get 0
+				i32.const 0
+				i32.lt_s
+				br_if $skipBuzz
+				i32.const 0
+				local.get 0
+				i32.sub
+				local.set 0
+			)
+			(block $skipToPrint
+				local.get 0
+				i32.const 0
+				i32.gt_s
+				br_if $skipToPrint
+				i32.const 0
+				local.get 0
+				i32.sub
+				local.set 0
+				i32.const 0
+				call $str
+				br $loop
+			)
+			local.get 0
+			call $num
+			br $loop
+		))
+	))
+```
+
+</details>
+
+## Meta
+
+### Import
+
+| WAT                                  | Wasmin                          | Semantics       |
+|--------------------------------------|---------------------------------|-----------------|
+| `(import "module" "name" ...)`       | `.import "module" "name" ...`   | Base of import  |
+| `(import ... (func $name ...))`      | `.import ... .func ...`         | Import function |
+| `(import ... (table ))`              | `.import ... .table `           | Import table    |
+| `(import ... (memory pages))`        | `.import ... .memory pages`     | Import memory   |
+| `(global $name (import ...) (type))` | `.import ... .global name type` | Import global   |
+
+### Export
+
+| WAT                              | Wasmin                           | Semantics                   |
+|----------------------------------|----------------------------------|-----------------------------|
+| `(func (export "name") ...)`     | `.func export ...`               | Exports & declares function |
+| `(export "name" (func $name))`   | `.export "optional" func name`   | Exports a function by name  |
+| `(table (export "name") ...)`    | `.table export ...`              | Exports & declares table    |
+| `(export "name" (table $name))`  | `.export "optional" table name`  | Exports a table by name     |
+| `(memory (export "name") ...)`   | `.memory export ...`             | Exports & declares memory   |
+| `(export "name" (memory $name))` | `.export "optional" memory name` | Exports memory by name      |
+| `(global (export "name") ...)`   | `.global export ...`             | Exports & declares global   |
+| `(export "name" (global $name))` | `.export "optional" global name` | Exports a global by name    |
+
+### Miscellaneous
+
+| WAT                            | Wasmin                   | Semantics                                      |
+|--------------------------------|--------------------------|------------------------------------------------|
+| `memory pages`                 | `.memory pages`          | Creates a memory page.                         |
+| `data (const offset) "string"` | `.data offset, "string"` | Fills the memory with the requested contents.  |
+| `table size type`              | `.table size type`       | Decalres a table of a given size and type.     |
+| `elem (const offset) ...`      | `.elem name offset, ...` | Fills the preceding table with elements.       |
+| `start $name/id`               | `.start name`            | Declares the starting function.                |
+|                                | `.include "./file.wsmn"` | Imports a Wasmin file to be bundled in output. |
